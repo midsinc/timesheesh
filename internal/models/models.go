@@ -1,0 +1,33 @@
+package models
+
+import "time"
+
+type Employee struct {
+	ID        int    `json:"id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Email     string `json:"email"`
+}
+
+type Project struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	CompanyName  string `json:"company_name"`
+	Description  string `json:"description"`
+}
+
+type Assignment struct {
+	ID           int     `json:"id"`
+	EmployeeID   int     `json:"employee_id"`
+	ProjectID     int     `json:"project_id"`
+	BillableRate float64 `json:"billable_rate"`
+	PayRate      float64 `json:"pay_rate"`
+}
+
+type TimeEntry struct {
+	ID            int       `json:"id"`
+	AssignmentID  int       `json:"assignment_id"`
+	Date          time.Time `json:"date"`
+	Hours         float64   `json:"hours"`
+	TaskDescription string  `json:"task_description"`
+}

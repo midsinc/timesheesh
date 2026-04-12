@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Sheesh Management</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f0f2f5; display: flex; }
+        nav { width: 240px; background: #2c3e50; color: white; height: 100vh; position: fixed; padding: 20px; }
+        nav h2 { font-size: 1.2rem; margin-bottom: 30px; text-align: center; border-bottom: 1px solid #3e5871; padding-bottom: 10px; }
+        nav ul { list-style: none; padding: 0; }
+        nav li { padding: 12px 15px; cursor: pointer; border-radius: 4px; transition: 0.2s; margin-bottom: 5px; }
+        nav li:hover { background: #3e5871; }
+        nav li.active { background: #3498db; }
+
+        main { margin-left: 280px; padding: 40px; width: calc(100% - 320px); }
+        .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        h3 { margin-top: 0; color: #333; border-bottom: 2px solid #f0f2f5; padding-bottom: 10px; }
+
+        .form-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        input, select, textarea { padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        button { padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #2980b9; }
+        button.secondary { background: #95a5a6; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; color: #666; font-weight: 600; }
+
+        .hidden { display: none; }
+        .flex { display: flex; gap: 10px; align-items: center; }
+        .status-msg { padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none; }
+        .status-success { background: #d4edda; color: #155724; display: block; }
+        .status-error { background: #f8d7da; color: #721c24; display: block; }
+    </style>
+</head>
+<body>
+    <nav>
+        <h2>Time Sheesh</h2>
+        <ul>
+            <li onclick="showPage('employees')" id="nav-employees" class="active">Employees</li>
+            <li onclick="showPage('projects')" id="nav-projects">Projects</li>
+            <li onclick="showPage('assignments')" id="nav-assignments">Assignments</li>
+            <li onclick="showPage('time')" id="nav-time">Time Entries</li>
+            <li onclick="showPage('invoices')" id="nav-invoices">Invoices</li>
+        </ul>
+    </nav>
+
+    <main>
+        <div id="status" class="status-msg"></div>
+
+        <!-- Employees Page -->
+        <div id="page-employees" class="page">
+            <div class="card">
+                <h3>Add Employee</h3>
+                <div class="form-group">
+                    <input type="text" id="emp-first" placeholder="First Name">
+                    <input type="text" id="emp-last" placeholder="Last Name">
+                    <input type="email" id="emp-email" placeholder="Email">
+                    <button onclick="api.createEmployee()">Save Employee</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Employee List</h3>
+                <table id="table-employees">
+                    <thead><tr><th>ID</th><th>Name</th><th>Email</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Projects Page -->
+        <div id="page-projects" class="page hidden">
+            <div class="card">
+                <h3>Add Project</h3>
+                <div class="form-group">
+                    <input type="text" id="proj-name" placeholder="Project Name">
+                    <input type="text" id="proj-company" placeholder="Company Name">
+                    <input type="text" id="proj-desc" placeholder="Description">
+                    <button onclick="api.createProject()">Save Project</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Project List</h3>
+                <table id="table-projects">
+                    <thead><tr><th>ID</th><th>Project</th><th>Company</th><th>Description</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Assignments Page -->
+        <div id="page-assignments" class="page hidden">
+            <div class="card">
+                <h3>New Assignment</h3>
+                <div class="form-group">
+                    <select id="asn-emp"></select>
+                    <select id="asn-proj"></select>
+                    <input type="number" id="asn-bill" placeholder="Billable Rate ($)">
+                    <input type="number" id="asn-pay" placeholder="Pay Rate ($)">
+                    <button onclick="api.createAssignment()">Assign</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Active Assignments</h3>
+                <table id="table-assignments">
+                    <thead><tr><th>ID</th><th>Employee</th><th>Project</th><th>Bill Rate</th><th>Pay Rate</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Time Entries Page -->
+        <div id="page-time" class="page hidden">
+            <div class="card">
+                <h3>Log Time</h3>
+                <div class="form-group">
+                    <select id="time-asn"></select>
+                    <input type="date" id="time-date">
+                    <input type="number" id="time-hours" placeholder="Hours">
+                    <input type="text" id="time-desc" placeholder="Task Description">
+                    <button onclick="api.createTimeEntry()">Log Hours</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Time Entries</h3>
+                <div class="flex" style="margin-bottom: 15px;">
+                    <input type="month" id="filter-month">
+                    <button onclick="api.fetchTimeEntries()">Filter</button>
+                </div>
+                <table id="table-time">
+                    <thead><tr><th>ID</th><th>Assignment</th><th>Date</th><th>Hours</th><th>Description</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Invoices Page -->
+        <div id="page-invoices" class="page hidden">
+            <div class="card">
+                <h3>Generate Invoice (PDF)</h3>
+                <div class="form-group">
+                    <select id="inv-proj"></select>
+                    <select id="inv-emp"></select>
+                    <input type="number" id="inv-year" placeholder="Year (e.g. 2026)">
+                    <input type="number" id="inv-month" placeholder="Month (1-12)">
+                    <button onclick="api.generateInvoice()">Download PDF</button>
+                </div>
+            </div>
+            <div class="card">
+                <p>Invoices are generated as PDF files. Use the form above to trigger generation and download.</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const api = {
+            async request(path, method = 'GET', body = null) {
+                const options = { method, headers: { 'Content-Type': 'application/json' } };
+                if (body) options.body = JSON.stringify(body);
+                const res = await fetch(path, options);
+                if (!res.ok) throw new Error(await res.text());
+                return res.json();
+            },
+
+            async notify(msg, type = 'success') {
+                const el = document.getElementById('status');
+                el.textContent = msg;
+                el.className = `status-msg status-${type}`;
+                setTimeout(() => el.className = 'status-msg', 3000);
+            },
+
+            async fetchEmployees() {
+                const data = await this.request('/api/employees');
+                const tbody = document.querySelector('#table-employees tbody');
+                tbody.innerHTML = data.map(e => `<tr><td>${e.id}</td><td>${e.first_name} ${e.last_name}</td><td>${e.email}</td></tr>`).join('');
+                this.updateSelect('asn-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
+                this.updateSelect('inv-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
+            },
+
+            async fetchProjects() {
+                const data = await this.request('/api/projects');
+                const tbody = document.querySelector('#table-projects tbody');
+                tbody.innerHTML = data.map(p => `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.company_name}</td><td>${p.description}</td></tr>`).join('');
+                this.updateSelect('asn-proj', 'proj', data, p => p.name);
+                this.updateSelect('inv-proj', 'proj', data, p => p.name);
+            },
+
+            async fetchAssignments() {
+                const data = await this.request('/api/assignments');
+                const tbody = document.querySelector('#table-assignments tbody');
+                tbody.innerHTML = data.map(a => `<tr><td>${a.id}</td><td>${a.employee_id}</td><td>${a.project_id}</td><td>${a.billable_rate}</td><td>${a.pay_rate}</td></tr>`).join('');
+                this.updateSelect('time-asn', 'asn', data, a => `Asgn #${a.id}`);
+            },
+
+            async fetchTimeEntries() {
+                const month = document.getElementById('filter-month').value;
+                const path = month ? `/api/time?month=${month}` : '/api/time';
+                const data = await this.request(path);
+                const tbody = document.querySelector('#table-time tbody');
+                tbody.innerHTML = data.map(t => `<tr><td>${t.id}</td><td>${t.assignment_id}</td><td>${t.date}</td><td>${t.hours}</td><td>${t.task_description}</td></tr>`).join('');
+            },
+
+            updateSelect(id, type, data, labelFn) {
+                const sel = document.getElementById(id);
+                sel.innerHTML = data.map(item => `<option value="${item.id}">${labelFn(item)} (ID: ${item.id})</option>`).join('');
+            },
+
+            async createEmployee() {
+                const body = {
+                    first_name: document.getElementById('emp-first').value,
+                    last_name: document.getElementById('emp-last').value,
+                    email: document.getElementById('emp-email').value
+                };
+                try {
+                    await this.request('/api/employees', 'POST', body);
+                    this.notify('Employee created!');
+                    this.fetchEmployees();
+                } catch(e) { this.notify(e.message, 'error'); }
+            },
+
+            async createProject() {
+                const body = {
+                    name: document.getElementById('proj-name').value,
+                    company_name: document.getElementById('proj-company').value,
+                    description: document.getElementById('proj-desc').value
+                };
+                try {
+                    await this.request('/api/projects', 'POST', body);
+                    this.notify('Project created!');
+                    this.fetchProjects();
+                } catch(e) { this.notify(e.message, 'error'); }
+            },
+
+            async createAssignment() {
+                const body = {
+                    employee_id: parseInt(document.getElementById('asn-emp').value),
+                    project_id: parseInt(document.getElementById('asn-proj').value),
+                    billable_rate: parseFloat(document.getElementById('asn-bill').value),
+                    pay_rate: parseFloat(document.getElementById('asn-pay').value)
+                };
+                try {
+                    await this.request('/api/assignments', 'POST', body);
+                    this.notify('Assignment created!');
+                    this.fetchAssignments();
+                } catch(e) { this.notify(e.message, 'error'); }
+            },
+
+            async createTimeEntry() {
+                const body = {
+                    assignment_id: parseInt(document.getElementById('time-asn').value),
+                    date: document.getElementById('time-date').value,
+                    hours: parseFloat(document.getElementById('time-hours').value),
+                    task_description: document.getElementById('time-desc').value
+                };
+                try {
+                    await this.request('/api/time', 'POST', body);
+                    this.notify('Time logged!');
+                    this.fetchTimeEntries();
+                } catch(e) { this.notify(e.message, 'error'); }
+            },
+
+            async generateInvoice() {
+                const pID = document.getElementById('inv-proj').value;
+                const eID = document.getElementById('inv-emp').value;
+                const yr = document.getElementById('inv-year').value;
+                const mo = document.getElementById('inv-month').value;
+
+                if(!pID || !eID || !yr || !mo) {
+                    this.notify('Please fill all fields', 'error');
+                    return;
+                }
+
+                const url = `/api/invoice?proj=${pID}&emp=${eID}&year=${yr}&month=${mo}`;
+                window.location.href = url;
+            }
+        };
+
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById('page-' + pageId).classList.remove('hidden');
+            document.querySelectorAll('nav li').forEach(l => l.classList.remove('active'));
+            document.getElementById('nav-' + pageId).classList.add('active');
+
+            if(pageId === 'employees') api.fetchEmployees();
+            if(pageId === 'projects') api.fetchProjects();
+            if(pageId === 'assignments') { api.fetchAssignments(); api.fetchEmployees(); api.fetchProjects(); }
+            if(pageId === 'time') { api.fetchTimeEntries(); api.fetchAssignments(); }
+            if(pageId === 'invoices') { api.fetchEmployees(); api.fetchProjects(); }
+        }
+
+        window.onload = () => {
+            showPage('employees');
+        }
+    </script>
+</body>
+</html>

@@ -100,6 +100,16 @@ func (s *WebServer) handleGetAssignments(c *gin.Context) {
 	c.JSON(http.StatusOK, asns)
 }
 
+func (s *WebServer) handleGetEmployeeAssignments(c *gin.Context) {
+	empID, _ := strconv.Atoi(c.Param("empId"))
+	asns, err := s.timeSvc.GetEmployeeAssignments(empID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, asns)
+}
+
 func (s *WebServer) handleCreateAssignment(c *gin.Context) {
 	var asn models.Assignment
 	if err := c.ShouldBindJSON(&asn); err != nil {
@@ -111,6 +121,29 @@ func (s *WebServer) handleCreateAssignment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, asn)
+}
+
+func (s *WebServer) handleGetBillingCodes(c *gin.Context) {
+	projID, _ := strconv.Atoi(c.Param("projectId"))
+	codes, err := s.timeSvc.GetBillingCodesByProject(projID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, codes)
+}
+
+func (s *WebServer) handleCreateBillingCode(c *gin.Context) {
+	var bc models.BillingCode
+	if err := c.ShouldBindJSON(&bc); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := s.timeSvc.CreateBillingCode(&bc); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, bc)
 }
 
 func (s *WebServer) handleGetTimeEntries(c *gin.Context) {

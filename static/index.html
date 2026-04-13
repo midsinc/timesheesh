@@ -83,9 +83,18 @@
             <div class="card">
                 <h3>Project List</h3>
                 <table id="table-projects">
-                    <thead><tr><th>ID</th><th>Project</th><th>Company</th><th>Description</th></tr></thead>
-                    <tbody></tbody>
+                    <thead><tr><th>ID</th><th>Project</th><th>Company</th><th>Description</th><th>Billing Codes</th></tr></thead>
+                    <tbody id="proj-list-body"></tbody>
                 </table>
+            </div>
+            <div class="card">
+                <h3>Add Billing Code</h3>
+                <div class="form-group">
+                    <select id="bc-proj"></select>
+                    <input type="text" id="bc-code" placeholder="Code (e.g. DEV-01)">
+                    <input type="text" id="bc-desc" placeholder="Description">
+                    <button onclick="api.createBillingCode()">Add Code</button>
+                </div>
             </div>
         </div>
 
@@ -115,10 +124,12 @@
             <div class="card">
                 <h3>Log Time</h3>
                 <div class="form-group">
-                    <select id="time-asn"></select>
+                    <select id="time-emp" onchange="api.onEmployeeSelected()"></select>
+                    <select id="time-asn" onchange="api.onAssignmentSelected()"></select>
+                    <select id="time-bc"></select>
                     <input type="date" id="time-date">
                     <input type="number" id="time-hours" placeholder="Hours">
-                    <input type="text" id="time-desc" placeholder="Task Description">
+                    <input type="text" id="time-desc" placeholder="Task Description (Optional)">
                     <button onclick="api.createTimeEntry()">Log Hours</button>
                 </div>
             </div>
@@ -176,14 +187,16 @@
                 tbody.innerHTML = data.map(e => `<tr><td>${e.id}</td><td>${e.first_name} ${e.last_name}</td><td>${e.email}</td></tr>`).join('');
                 this.updateSelect('asn-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
                 this.updateSelect('inv-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
+                this.updateSelect('time-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
             },
 
             async fetchProjects() {
                 const data = await this.request('/api/projects');
                 const tbody = document.querySelector('#table-projects tbody');
-                tbody.innerHTML = data.map(p => `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.company_name}</td><td>${p.description}</td></tr>`).join('');
+                tbody.innerHTML = data.map(p => `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.company_name}</td><td>${p.description}</td><td></td></tr>`).join('');
                 this.updateSelect('asn-proj', 'proj', data, p => p.name);
                 this.updateSelect('inv-proj', 'proj', data, p => p.name);
+                this.updateSelect('bc-proj', 'proj', data, p => p.name);
             },
 
             async fetchAssignments() {
@@ -246,9 +259,51 @@
                 } catch(e) { this.notify(e.message, 'error'); }
             },
 
+            async createBillingCode() {
+                const body = {
+                    project_id: parseInt(document.getElementById('bc-proj').value),
+                    code: document.getElementById('bc-code').value,
+                    description: document.getElementById('bc-desc').value
+                };
+                try {
+                    await this.request('/api/billing-codes', 'POST', body);
+                    this.notify('Billing code created!');
+                    this.fetchProjects();
+                } catch(e) { this.notify(e.message, 'error'); }
+            },
+
+            async onEmployeeSelected() {
+                const empId = document.getElementById('time-emp').value;
+                if(!empId) return;
+                const asns = await this.request(`/api/assignments/employee/${empId}`);
+
+                const asnSel = document.getElementById('time-asn');
+                asnSel.innerHTML = asns.map(a => `<option value="${a.id}">Asgn #${a.id} (Proj ${a.project_id})</option>`).join('');
+
+                if (asns.length === 1) {
+                    this.onAssignmentSelected(asns[0].project_id);
+                }
+            },
+
+            async onAssignmentSelected(projId) {
+                const selectedAsnId = document.getElementById('time-asn').value;
+                if (!projId) {
+                    if (!selectedAsnId) return;
+                    const asns = await this.request('/api/assignments');
+                    const asn = asns.find(a => a.id == selectedAsnId);
+                    if (!asn) return;
+                    projId = asn.project_id;
+                }
+
+                const codes = await this.request(`/api/billing-codes/${projId}`);
+                const bcSel = document.getElementById('time-bc');
+                bcSel.innerHTML = codes.map(c => `<option value="${c.id}">${c.code} - ${c.description}</option>`).join('');
+            },
+
             async createTimeEntry() {
                 const body = {
                     assignment_id: parseInt(document.getElementById('time-asn').value),
+                    billing_code_id: parseInt(document.getElementById('time-bc').value),
                     date: document.getElementById('time-date').value,
                     hours: parseFloat(document.getElementById('time-hours').value),
                     task_description: document.getElementById('time-desc').value
@@ -285,7 +340,7 @@
             if(pageId === 'employees') api.fetchEmployees();
             if(pageId === 'projects') api.fetchProjects();
             if(pageId === 'assignments') { api.fetchAssignments(); api.fetchEmployees(); api.fetchProjects(); }
-            if(pageId === 'time') { api.fetchTimeEntries(); api.fetchAssignments(); }
+            if(pageId === 'time') { api.fetchTimeEntries(); api.fetchAssignments(); api.fetchEmployees(); }
             if(pageId === 'invoices') { api.fetchEmployees(); api.fetchProjects(); }
         }
 

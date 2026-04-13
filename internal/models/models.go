@@ -16,6 +16,13 @@ type Project struct {
 	Description  string `json:"description"`
 }
 
+type BillingCode struct {
+	ID          int    `json:"id"`
+	ProjectID   int    `json:"project_id"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
+}
+
 type Assignment struct {
 	ID           int     `json:"id"`
 	EmployeeID   int     `json:"employee_id"`
@@ -25,9 +32,10 @@ type Assignment struct {
 }
 
 type TimeEntry struct {
-	ID            int       `json:"id"`
-	AssignmentID  int       `json:"assignment_id"`
-	Date          time.Time `json:"date"`
-	Hours         float64   `json:"hours"`
-	TaskDescription string  `json:"task_description"`
+	ID              int       `json:"id"`
+	AssignmentID    int       `json:"assignment_id"`
+	BillingCodeID    int       `json:"billing_code_id"`
+	Date            time.Time `json:"date"`
+	Hours           float64   `json:"hours"`
+	TaskDescription string    `json:"task_description"`
 }

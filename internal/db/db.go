@@ -32,6 +32,13 @@ func createTables(db *sql.DB) error {
 			company_name TEXT NOT NULL,
 			description TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS billing_codes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id INTEGER NOT NULL,
+			code TEXT NOT NULL,
+			description TEXT,
+			FOREIGN KEY(project_id) REFERENCES projects(id)
+		);`,
 		`CREATE TABLE IF NOT EXISTS assignments (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			employee_id INTEGER NOT NULL,
@@ -44,10 +51,12 @@ func createTables(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS time_entries (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			assignment_id INTEGER NOT NULL,
+			billing_code_id INTEGER,
 			date DATE NOT NULL,
 			hours REAL NOT NULL,
 			task_description TEXT,
-			FOREIGN KEY(assignment_id) REFERENCES assignments(id)
+			FOREIGN KEY(assignment_id) REFERENCES assignments(id),
+			FOREIGN KEY(billing_code_id) REFERENCES billing_codes(id)
 		);`,
 	}
 

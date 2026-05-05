@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"time"
+	"timesheesh/internal/app"
 	"timesheesh/internal/models"
 	"timesheesh/internal/services"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -60,8 +62,9 @@ func (s *WebServer) setupRoutes() {
 		api.GET("/invoice", s.handleGenerateInvoice)
 	}
 
-	s.router.StaticFile("/", "./static/index.html")
-	s.router.Static("/static", "./static")
+	staticDir := app.ResolveAppPath("static")
+	s.router.StaticFile("/", filepath.Join(staticDir, "index.html"))
+	s.router.Static("/static", staticDir)
 }
 
 func (s *WebServer) handleGetEmployees(c *gin.Context) {
@@ -293,10 +296,10 @@ func (s *WebServer) handleUpdateTimeEntry(c *gin.Context) {
 
 func parseTimeEntryRequest(c *gin.Context) (models.TimeEntry, error) {
 	var req struct {
-		AssignmentID   int      `json:"assignment_id"`
-		BillingCodeID  *int     `json:"billing_code_id"`
-		Date           string   `json:"date"`
-		Hours          float64  `json:"hours"`
+		AssignmentID    int     `json:"assignment_id"`
+		BillingCodeID   *int    `json:"billing_code_id"`
+		Date            string  `json:"date"`
+		Hours           float64 `json:"hours"`
 		TaskDescription string  `json:"task_description"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {

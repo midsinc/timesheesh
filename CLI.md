@@ -9,6 +9,8 @@ The CLI also supports human-friendly references so you do not have to memorize i
 - `--db <path>`: use a specific SQLite database file.
 - `--json`: emit structured JSON instead of human-formatted text.
 
+By default, the CLI now looks for the existing `timesheesh.db` in the current working tree and next to the executable before creating a new file, which avoids accidentally booting against an empty database from a different directory.
+
 ## Commands
 
 ## Reference Rules
@@ -72,16 +74,25 @@ Example:
 
 ### Time Entries
 
-- `timesheesh time add <assignment_ref> <date:YYYY-MM-DD> <hours> <task_description> [billing_code_id]`
-- `timesheesh time update <id> <assignment_ref> <date:YYYY-MM-DD> <hours> <task_description> [billing_code_id]`
+- `timesheesh time add <assignment_ref> <date:YYYY-MM-DD> <hours> <task_description> [billing_code_ref]`
+- `timesheesh time log <project_ref> <hours> <task_description>`
+- `timesheesh time update <id> <assignment_ref> <date:YYYY-MM-DD> <hours> <task_description> [billing_code_ref]`
 - `timesheesh time list [month_YYYY-MM]`
 
 Example:
 
 ```bash
 ./timesheesh time add "Ada Lovelace::Apollo" 2026-04-13 8 "Feature build" 1
+export TIMESHEESH_EMPLOYEE="ada@example.com"
+./timesheesh time log Apollo 8 "Feature build" --billing-code DEV-01
 ./timesheesh time list 2026-04 --json
 ```
+
+Quick logging notes:
+
+- `time log` defaults the date to today.
+- `time log` resolves the employee from `--employee`, `TIMESHEESH_EMPLOYEE`, or the only employee in the database.
+- `billing_code_ref` can be either a numeric ID or the billing code itself, such as `DEV-01`.
 
 ### Invoices
 

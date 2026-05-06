@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"timesheesh/internal/app"
 	"timesheesh/internal/db"
 	"timesheesh/internal/models"
 	"timesheesh/internal/services"
@@ -22,6 +23,10 @@ var (
 	jsonOutput bool
 	service    *services.TimeService
 	invSvc     *services.InvoiceService
+
+	quickLogEmployeeRef    string
+	quickLogDate           string
+	quickLogBillingCodeRef string
 )
 
 var rootCmd = &cobra.Command{
@@ -33,7 +38,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "timesheesh.db", "Path to SQLite database")
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", app.ResolveAppPath("timesheesh.db"), "Path to SQLite database")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Emit machine-readable JSON instead of human-formatted text")
 }
 
@@ -183,6 +188,101 @@ func resolveAssignmentRef(ref string) int {
 
 	log.Fatalf("Assignment reference %q not found. Run './timesheesh assignment list'.", ref)
 	return 0
+}
+
+func resolveEmployeeContext(ref string) int {
+	if strings.TrimSpace(ref) != "" {
+		return resolveEmployeeRef(ref)
+	}
+
+	if envRef := strings.TrimSpace(os.Getenv("TIMESHEESH_EMPLOYEE")); envRef != "" {
+		return resolveEmployeeRef(envRef)
+	}
+
+	employees, err := service.GetEmployees()
+	if err != nil {
+		log.Fatalf("Error getting employees: %v", err)
+	}
+	if len(employees) == 1 {
+		return employees[0].ID
+	}
+	if len(employees) == 0 {
+		log.Fatal("No employees found. Create an employee first with './timesheesh employee add'.")
+	}
+
+	log.Fatal("Multiple employees found. Use --employee or set TIMESHEESH_EMPLOYEE to choose who is logging time.")
+	return 0
+}
+
+func resolveAssignmentForEmployeeProject(employeeID int, projectID int) int {
+	assignments, err := service.GetAssignments()
+	if err != nil {
+		log.Fatalf("Error getting assignments: %v", err)
+	}
+
+	for _, assignment := range assignments {
+		if assignment.EmployeeID == employeeID && assignment.ProjectID == projectID {
+			return assignment.ID
+		}
+	}
+
+	log.Fatalf("No assignment found for employee %d on project %d. Run './timesheesh assignment list'.", employeeID, projectID)
+	return 0
+}
+
+func resolveProjectIDForAssignment(assignmentID int) int {
+	assignments, err := service.GetAssignments()
+	if err != nil {
+		log.Fatalf("Error getting assignments: %v", err)
+	}
+
+	for _, assignment := range assignments {
+		if assignment.ID == assignmentID {
+			return assignment.ProjectID
+		}
+	}
+
+	log.Fatalf("Assignment %d not found. Run './timesheesh assignment list'.", assignmentID)
+	return 0
+}
+
+func resolveBillingCodeRef(projectID int, ref string) int {
+	if strings.TrimSpace(ref) == "" {
+		return 0
+	}
+
+	codes, err := service.GetBillingCodesByProject(projectID)
+	if err != nil {
+		log.Fatalf("Error getting billing codes: %v", err)
+	}
+
+	if isNumericRef(ref) {
+		id := mustAtoi(ref, "billing code id")
+		for _, code := range codes {
+			if code.ID == id {
+				return code.ID
+			}
+		}
+		log.Fatalf("Billing code %q was not found on project %d. Run './timesheesh billing-code list <project>'.", ref, projectID)
+	}
+
+	needle := normalizeRef(ref)
+	for _, code := range codes {
+		if normalizeRef(code.Code) == needle {
+			return code.ID
+		}
+	}
+
+	log.Fatalf("Billing code reference %q not found on project %d. Run './timesheesh billing-code list <project>'.", ref, projectID)
+	return 0
+}
+
+func resolveEntryDate(value string) time.Time {
+	if strings.TrimSpace(value) == "" {
+		now := time.Now()
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	}
+	return mustParseDate(value)
 }
 
 var addEmployeeCmd = &cobra.Command{
@@ -423,19 +523,20 @@ var listBillingCodesCmd = &cobra.Command{
 }
 
 var addTimeCmd = &cobra.Command{
-	Use:   "add [assignment_ref] [date:YYYY-MM-DD] [hours] [task_description] [billing_code_id_optional]",
+	Use:   "add [assignment_ref] [date:YYYY-MM-DD] [hours] [task_description] [billing_code_ref_optional]",
 	Short: "Add a time entry",
 	Args:  cobra.RangeArgs(4, 5),
 	Run: func(cmd *cobra.Command, args []string) {
 		setupDB()
+		assignmentID := resolveAssignmentRef(args[0])
 		te := &models.TimeEntry{
-			AssignmentID:    resolveAssignmentRef(args[0]),
+			AssignmentID:    assignmentID,
 			Date:            mustParseDate(args[1]),
 			Hours:           mustParseFloat(args[2], "hours"),
 			TaskDescription: args[3],
 		}
 		if len(args) == 5 {
-			te.BillingCodeID = mustAtoi(args[4], "billing code id")
+			te.BillingCodeID = resolveBillingCodeRef(resolveProjectIDForAssignment(assignmentID), args[4])
 		}
 		if err := service.CreateTimeEntry(te); err != nil {
 			log.Fatalf("Error creating time entry: %v", err)
@@ -445,25 +546,54 @@ var addTimeCmd = &cobra.Command{
 }
 
 var updateTimeCmd = &cobra.Command{
-	Use:   "update [id] [assignment_ref] [date:YYYY-MM-DD] [hours] [task_description] [billing_code_id_optional]",
+	Use:   "update [id] [assignment_ref] [date:YYYY-MM-DD] [hours] [task_description] [billing_code_ref_optional]",
 	Short: "Update a time entry",
 	Args:  cobra.RangeArgs(5, 6),
 	Run: func(cmd *cobra.Command, args []string) {
 		setupDB()
+		assignmentID := resolveAssignmentRef(args[1])
 		te := &models.TimeEntry{
 			ID:              mustAtoi(args[0], "time entry id"),
-			AssignmentID:    resolveAssignmentRef(args[1]),
+			AssignmentID:    assignmentID,
 			Date:            mustParseDate(args[2]),
 			Hours:           mustParseFloat(args[3], "hours"),
 			TaskDescription: args[4],
 		}
 		if len(args) == 6 {
-			te.BillingCodeID = mustAtoi(args[5], "billing code id")
+			te.BillingCodeID = resolveBillingCodeRef(resolveProjectIDForAssignment(assignmentID), args[5])
 		}
 		if err := service.UpdateTimeEntry(te); err != nil {
 			log.Fatalf("Error updating time entry: %v", err)
 		}
 		printOutput(te, fmt.Sprintf("Time entry %d updated", te.ID))
+	},
+}
+
+var logTimeCmd = &cobra.Command{
+	Use:     "log [project_ref] [hours] [task_description]",
+	Aliases: []string{"quick-add"},
+	Short:   "Quickly log time for yourself",
+	Long: "Quick time entry flow for everyday CLI use.\n" +
+		"The date defaults to today, the employee comes from --employee, TIMESHEESH_EMPLOYEE, or the only employee in the database,\n" +
+		"and billing codes can be provided by code or ID.",
+	Args: cobra.ExactArgs(3),
+	Run: func(cmd *cobra.Command, args []string) {
+		setupDB()
+		employeeID := resolveEmployeeContext(quickLogEmployeeRef)
+		projectID := resolveProjectRef(args[0])
+		te := &models.TimeEntry{
+			AssignmentID:    resolveAssignmentForEmployeeProject(employeeID, projectID),
+			Date:            resolveEntryDate(quickLogDate),
+			Hours:           mustParseFloat(args[1], "hours"),
+			TaskDescription: args[2],
+		}
+		if strings.TrimSpace(quickLogBillingCodeRef) != "" {
+			te.BillingCodeID = resolveBillingCodeRef(projectID, quickLogBillingCodeRef)
+		}
+		if err := service.CreateTimeEntry(te); err != nil {
+			log.Fatalf("Error creating time entry: %v", err)
+		}
+		printOutput(te, fmt.Sprintf("Time entry %d created", te.ID))
 	},
 }
 
@@ -592,9 +722,12 @@ func init() {
 	timeCmd := &cobra.Command{
 		Use:   "time",
 		Short: "Create, update, and list time entries",
-		Long:  "Time entries support optional billing code linkage, matching the web app behavior. Assignment references can be IDs or employee::project pairs.",
+		Long:  "Time entries support optional billing code linkage, matching the web app behavior. Use 'time log' for a faster daily-entry flow.",
 	}
-	timeCmd.AddCommand(addTimeCmd, updateTimeCmd, listTimeCmd)
+	logTimeCmd.Flags().StringVar(&quickLogEmployeeRef, "employee", "", "Employee logging the time entry; falls back to TIMESHEESH_EMPLOYEE or the only employee in the database")
+	logTimeCmd.Flags().StringVar(&quickLogDate, "date", "", "Entry date in YYYY-MM-DD; defaults to today")
+	logTimeCmd.Flags().StringVar(&quickLogBillingCodeRef, "billing-code", "", "Billing code ID or code for the project")
+	timeCmd.AddCommand(addTimeCmd, logTimeCmd, updateTimeCmd, listTimeCmd)
 	rootCmd.AddCommand(timeCmd)
 
 	rootCmd.AddCommand(genInvoiceCmd)

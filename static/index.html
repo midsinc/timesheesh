@@ -29,6 +29,9 @@
 
         .hidden { display: none; }
         .flex { display: flex; gap: 10px; align-items: center; }
+        .field-stack { display: flex; flex-direction: column; gap: 6px; }
+        .field-stack label { font-size: 12px; font-weight: 600; color: #555; }
+        .field-stack small { font-size: 12px; color: #777; }
         .status-msg { padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none; }
         .status-success { background: #d4edda; color: #155724; display: block; }
         .status-error { background: #f8d7da; color: #721c24; display: block; }
@@ -52,18 +55,20 @@
         <!-- Employees Page -->
         <div id="page-employees" class="page">
             <div class="card">
-                <h3>Add Employee</h3>
+                <h3 id="employee-form-title">Add Employee</h3>
                 <div class="form-group">
                     <input type="text" id="emp-first" placeholder="First Name">
                     <input type="text" id="emp-last" placeholder="Last Name">
                     <input type="email" id="emp-email" placeholder="Email">
-                    <button onclick="api.createEmployee()">Save Employee</button>
+                    <input type="text" id="emp-address" placeholder="Address">
+                    <button id="employee-submit-btn" onclick="api.saveEmployee()">Save Employee</button>
+                    <button id="employee-cancel-btn" class="secondary hidden" onclick="api.resetEmployeeForm()">Cancel Edit</button>
                 </div>
             </div>
             <div class="card">
                 <h3>Employee List</h3>
                 <table id="table-employees">
-                    <thead><tr><th>ID</th><th>Name</th><th>Email</th></tr></thead>
+                    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Address</th><th>Actions</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -72,18 +77,24 @@
         <!-- Projects Page -->
         <div id="page-projects" class="page hidden">
             <div class="card">
-                <h3>Add Project</h3>
+                <h3 id="project-form-title">Add Project</h3>
                 <div class="form-group">
                     <input type="text" id="proj-name" placeholder="Project Name">
                     <input type="text" id="proj-company" placeholder="Company Name">
                     <input type="text" id="proj-desc" placeholder="Description">
-                    <button onclick="api.createProject()">Save Project</button>
+                    <div class="field-stack">
+                        <label for="proj-terms">Invoice Payment Due Days</label>
+                        <input type="number" id="proj-terms" value="30" min="0" title="Number of days after the invoice period ends before payment is due">
+                        <small>Used to calculate the payment target date on invoices.</small>
+                    </div>
+                    <button id="project-submit-btn" onclick="api.saveProject()">Save Project</button>
+                    <button id="project-cancel-btn" class="secondary hidden" onclick="api.resetProjectForm()">Cancel Edit</button>
                 </div>
             </div>
             <div class="card">
                 <h3>Project List</h3>
                 <table id="table-projects">
-                    <thead><tr><th>ID</th><th>Project</th><th>Company</th><th>Description</th><th>Billing Codes</th></tr></thead>
+                    <thead><tr><th>ID</th><th>Project</th><th>Company</th><th>Description</th><th>Invoice Due Terms</th><th>Billing Codes</th><th>Actions</th></tr></thead>
                     <tbody id="proj-list-body"></tbody>
                 </table>
             </div>
@@ -101,19 +112,20 @@
         <!-- Assignments Page -->
         <div id="page-assignments" class="page hidden">
             <div class="card">
-                <h3>New Assignment</h3>
+                <h3 id="assignment-form-title">New Assignment</h3>
                 <div class="form-group">
                     <select id="asn-emp"></select>
                     <select id="asn-proj"></select>
                     <input type="number" id="asn-bill" placeholder="Billable Rate ($)">
                     <input type="number" id="asn-pay" placeholder="Pay Rate ($)">
-                    <button onclick="api.createAssignment()">Assign</button>
+                    <button id="assignment-submit-btn" onclick="api.saveAssignment()">Assign</button>
+                    <button id="assignment-cancel-btn" class="secondary hidden" onclick="api.resetAssignmentForm()">Cancel Edit</button>
                 </div>
             </div>
             <div class="card">
                 <h3>Active Assignments</h3>
                 <table id="table-assignments">
-                    <thead><tr><th>ID</th><th>Employee</th><th>Project</th><th>Bill Rate</th><th>Pay Rate</th></tr></thead>
+                    <thead><tr><th>ID</th><th>Employee</th><th>Project</th><th>Bill Rate</th><th>Pay Rate</th><th>Actions</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -122,7 +134,7 @@
         <!-- Time Entries Page -->
         <div id="page-time" class="page hidden">
             <div class="card">
-                <h3>Log Time</h3>
+                <h3 id="time-form-title">Log Time</h3>
                 <div class="form-group">
                     <select id="time-emp" onchange="api.onEmployeeSelected()"></select>
                     <select id="time-asn" onchange="api.onAssignmentSelected()"></select>
@@ -130,7 +142,8 @@
                     <input type="date" id="time-date">
                     <input type="number" id="time-hours" placeholder="Hours">
                     <input type="text" id="time-desc" placeholder="Task Description (Optional)">
-                    <button onclick="api.createTimeEntry()">Log Hours</button>
+                    <button id="time-submit-btn" onclick="api.saveTimeEntry()">Log Hours</button>
+                    <button id="time-cancel-btn" class="secondary hidden" onclick="api.resetTimeEntryForm()">Cancel Edit</button>
                 </div>
             </div>
             <div class="card">
@@ -140,7 +153,7 @@
                     <button onclick="api.fetchTimeEntries()">Filter</button>
                 </div>
                 <table id="table-time">
-                    <thead><tr><th>ID</th><th>Assignment</th><th>Date</th><th>Hours</th><th>Description</th></tr></thead>
+                    <thead><tr><th>ID</th><th>Assignment</th><th>Billing Code</th><th>Date</th><th>Hours</th><th>Description</th><th>Actions</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -151,10 +164,28 @@
             <div class="card">
                 <h3>Generate Invoice (PDF)</h3>
                 <div class="form-group">
-                    <select id="inv-proj"></select>
-                    <select id="inv-emp"></select>
+                    <select id="inv-proj" onchange="api.syncInvoiceOptions()"></select>
+                    <select id="inv-emp" onchange="api.syncInvoiceOptions()"></select>
                     <input type="number" id="inv-year" placeholder="Year (e.g. 2026)">
-                    <input type="number" id="inv-month" placeholder="Month (1-12)">
+                    <select id="inv-month" title="Invoice month">
+                        <option value="">Select Invoice Month</option>
+                        <option value="1">January</option>
+                        <option value="2">February</option>
+                        <option value="3">March</option>
+                        <option value="4">April</option>
+                        <option value="5">May</option>
+                        <option value="6">June</option>
+                        <option value="7">July</option>
+                        <option value="8">August</option>
+                        <option value="9">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                    </select>
+                    <select id="inv-desc-mode">
+                        <option value="task">Use task description</option>
+                        <option value="project">Use project name / description</option>
+                    </select>
                     <button onclick="api.generateInvoice()">Download PDF</button>
                 </div>
             </div>
@@ -166,12 +197,27 @@
 
     <script>
         const api = {
+            invoiceAssignments: [],
+            employeesByID: new Map(),
+            projectsByID: new Map(),
+            assignmentsByID: new Map(),
+            billingCodesByID: new Map(),
+            timeEntriesByID: new Map(),
+            editingEmployeeID: null,
+            editingProjectID: null,
+            editingAssignmentID: null,
+            editingTimeEntryID: null,
+
             async request(path, method = 'GET', body = null) {
                 const options = { method, headers: { 'Content-Type': 'application/json' } };
                 if (body) options.body = JSON.stringify(body);
                 const res = await fetch(path, options);
                 if (!res.ok) throw new Error(await res.text());
                 return res.json();
+            },
+
+            isPageVisible(pageId) {
+                return !document.getElementById('page-' + pageId).classList.contains('hidden');
             },
 
             async notify(msg, type = 'success') {
@@ -183,8 +229,9 @@
 
             async fetchEmployees() {
                 const data = await this.request('/api/employees');
+                this.employeesByID = new Map(data.map(e => [e.id, e]));
                 const tbody = document.querySelector('#table-employees tbody');
-                tbody.innerHTML = data.map(e => `<tr><td>${e.id}</td><td>${e.first_name} ${e.last_name}</td><td>${e.email}</td></tr>`).join('');
+                tbody.innerHTML = data.map(e => `<tr><td>${e.id}</td><td>${e.first_name} ${e.last_name}</td><td>${e.email}</td><td>${e.address || ''}</td><td><button class="secondary" onclick="api.editEmployee(${e.id})">Edit</button></td></tr>`).join('');
                 this.updateSelect('asn-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
                 this.updateSelect('inv-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
                 this.updateSelect('time-emp', 'emp', data, e => `${e.first_name} ${e.last_name}`);
@@ -192,8 +239,21 @@
 
             async fetchProjects() {
                 const data = await this.request('/api/projects');
+                this.projectsByID = new Map(data.map(p => [p.id, p]));
+                const codesByProject = new Map(
+                    await Promise.all(
+                        data.map(async project => [project.id, await this.request(`/api/billing-codes/${project.id}`)])
+                    )
+                );
+                this.billingCodesByID = new Map(
+                    Array.from(codesByProject.values()).flat().map(code => [code.id, code])
+                );
                 const tbody = document.querySelector('#table-projects tbody');
-                tbody.innerHTML = data.map(p => `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.company_name}</td><td>${p.description}</td><td></td></tr>`).join('');
+                tbody.innerHTML = data.map(p => {
+                    const codes = codesByProject.get(p.id) || [];
+                    const codesLabel = codes.length ? codes.map(c => c.code).join(', ') : '<span style="color:#888;">None</span>';
+                    return `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.company_name}</td><td>${p.description}</td><td>Invoice due in ${p.default_payment_terms} days</td><td>${codesLabel}</td><td><button class="secondary" onclick="api.editProject(${p.id})">Edit</button></td></tr>`;
+                }).join('');
                 this.updateSelect('asn-proj', 'proj', data, p => p.name);
                 this.updateSelect('inv-proj', 'proj', data, p => p.name);
                 this.updateSelect('bc-proj', 'proj', data, p => p.name);
@@ -201,51 +261,189 @@
 
             async fetchAssignments() {
                 const data = await this.request('/api/assignments');
+                this.invoiceAssignments = data;
+                this.assignmentsByID = new Map(data.map(a => [a.id, a]));
                 const tbody = document.querySelector('#table-assignments tbody');
-                tbody.innerHTML = data.map(a => `<tr><td>${a.id}</td><td>${a.employee_id}</td><td>${a.project_id}</td><td>${a.billable_rate}</td><td>${a.pay_rate}</td></tr>`).join('');
-                this.updateSelect('time-asn', 'asn', data, a => `Asgn #${a.id}`);
+                tbody.innerHTML = data.map(a => {
+                    const employee = this.employeesByID.get(a.employee_id);
+                    const project = this.projectsByID.get(a.project_id);
+                    const employeeLabel = employee ? `${employee.first_name} ${employee.last_name}` : `Employee #${a.employee_id}`;
+                    const projectLabel = project ? project.name : `Project #${a.project_id}`;
+                    return `<tr><td>${a.id}</td><td>${employeeLabel}</td><td>${projectLabel}</td><td>${a.billable_rate}</td><td>${a.pay_rate}</td><td><button class="secondary" onclick="api.editAssignment(${a.id})">Edit</button></td></tr>`;
+                }).join('');
+            },
+
+            syncInvoiceOptions() {
+                const projectSel = document.getElementById('inv-proj');
+                const employeeSel = document.getElementById('inv-emp');
+                if (!projectSel || !employeeSel) return;
+
+                const projectOptions = Array.from(projectSel.options);
+                const employeeOptions = Array.from(employeeSel.options);
+                const selectedProjectID = parseInt(projectSel.value, 10);
+                const selectedEmployeeID = parseInt(employeeSel.value, 10);
+
+                const allowedEmployeeIDs = new Set(
+                    this.invoiceAssignments
+                        .filter(a => !selectedProjectID || a.project_id === selectedProjectID)
+                        .map(a => String(a.employee_id))
+                );
+                const allowedProjectIDs = new Set(
+                    this.invoiceAssignments
+                        .filter(a => !selectedEmployeeID || a.employee_id === selectedEmployeeID)
+                        .map(a => String(a.project_id))
+                );
+
+                employeeOptions.forEach(option => {
+                    option.hidden = allowedEmployeeIDs.size > 0 && !allowedEmployeeIDs.has(option.value);
+                });
+                projectOptions.forEach(option => {
+                    option.hidden = allowedProjectIDs.size > 0 && !allowedProjectIDs.has(option.value);
+                });
+
+                const visibleEmployee = employeeOptions.find(option => !option.hidden);
+                if (employeeSel.selectedOptions.length === 0 || employeeSel.selectedOptions[0].hidden) {
+                    employeeSel.value = visibleEmployee ? visibleEmployee.value : "";
+                }
+
+                const refreshedEmployeeID = parseInt(employeeSel.value, 10);
+                const refreshedAllowedProjects = new Set(
+                    this.invoiceAssignments
+                        .filter(a => !refreshedEmployeeID || a.employee_id === refreshedEmployeeID)
+                        .map(a => String(a.project_id))
+                );
+                projectOptions.forEach(option => {
+                    option.hidden = refreshedAllowedProjects.size > 0 && !refreshedAllowedProjects.has(option.value);
+                });
+
+                const visibleProject = projectOptions.find(option => !option.hidden);
+                if (projectSel.selectedOptions.length === 0 || projectSel.selectedOptions[0].hidden) {
+                    projectSel.value = visibleProject ? visibleProject.value : "";
+                }
             },
 
             async fetchTimeEntries() {
                 const month = document.getElementById('filter-month').value;
                 const path = month ? `/api/time?month=${month}` : '/api/time';
                 const data = await this.request(path);
+                this.timeEntriesByID = new Map(data.map(entry => [entry.id, entry]));
                 const tbody = document.querySelector('#table-time tbody');
-                tbody.innerHTML = data.map(t => `<tr><td>${t.id}</td><td>${t.assignment_id}</td><td>${t.date}</td><td>${t.hours}</td><td>${t.task_description}</td></tr>`).join('');
+                tbody.innerHTML = data.map(t => {
+                    const assignmentLabel = this.getAssignmentLabel(t.assignment_id);
+                    const billingCode = t.billing_code_id ? this.billingCodesByID.get(t.billing_code_id) : null;
+                    const billingCodeLabel = billingCode ? `${billingCode.code}${billingCode.description ? ` - ${billingCode.description}` : ''}` : '<span style="color:#888;">None</span>';
+                    return `<tr><td>${t.id}</td><td>${assignmentLabel}</td><td>${billingCodeLabel}</td><td>${t.date}</td><td>${t.hours}</td><td>${t.task_description || ''}</td><td><button class="secondary" onclick="api.editTimeEntry(${t.id})">Edit</button></td></tr>`;
+                }).join('');
+            },
+
+            getAssignmentLabel(assignmentID) {
+                const assignment = this.assignmentsByID.get(assignmentID);
+                if (!assignment) return `Assignment #${assignmentID}`;
+                const employee = this.employeesByID.get(assignment.employee_id);
+                const project = this.projectsByID.get(assignment.project_id);
+                const employeeLabel = employee ? `${employee.first_name} ${employee.last_name}` : `Employee #${assignment.employee_id}`;
+                const projectLabel = project ? project.name : `Project #${assignment.project_id}`;
+                return `${employeeLabel} - ${projectLabel}`;
             },
 
             updateSelect(id, type, data, labelFn) {
                 const sel = document.getElementById(id);
+                const previousValue = sel.value;
                 sel.innerHTML = data.map(item => `<option value="${item.id}">${labelFn(item)} (ID: ${item.id})</option>`).join('');
+                if (data.some(item => String(item.id) === previousValue)) {
+                    sel.value = previousValue;
+                }
             },
 
-            async createEmployee() {
+            async saveEmployee() {
                 const body = {
                     first_name: document.getElementById('emp-first').value,
                     last_name: document.getElementById('emp-last').value,
-                    email: document.getElementById('emp-email').value
+                    email: document.getElementById('emp-email').value,
+                    address: document.getElementById('emp-address').value
                 };
                 try {
-                    await this.request('/api/employees', 'POST', body);
-                    this.notify('Employee created!');
-                    this.fetchEmployees();
+                    if (this.editingEmployeeID) {
+                        await this.request(`/api/employees/${this.editingEmployeeID}`, 'PUT', body);
+                        this.notify('Employee updated!');
+                    } else {
+                        await this.request('/api/employees', 'POST', body);
+                        this.notify('Employee created!');
+                    }
+                    this.resetEmployeeForm();
+                    await this.fetchEmployees();
                 } catch(e) { this.notify(e.message, 'error'); }
             },
 
-            async createProject() {
+            editEmployee(id) {
+                const employee = this.employeesByID.get(id);
+                if (!employee) return;
+                this.editingEmployeeID = id;
+                document.getElementById('employee-form-title').textContent = `Edit Employee #${id}`;
+                document.getElementById('employee-submit-btn').textContent = 'Update Employee';
+                document.getElementById('employee-cancel-btn').classList.remove('hidden');
+                document.getElementById('emp-first').value = employee.first_name;
+                document.getElementById('emp-last').value = employee.last_name;
+                document.getElementById('emp-email').value = employee.email;
+                document.getElementById('emp-address').value = employee.address || '';
+            },
+
+            resetEmployeeForm() {
+                this.editingEmployeeID = null;
+                document.getElementById('employee-form-title').textContent = 'Add Employee';
+                document.getElementById('employee-submit-btn').textContent = 'Save Employee';
+                document.getElementById('employee-cancel-btn').classList.add('hidden');
+                document.getElementById('emp-first').value = '';
+                document.getElementById('emp-last').value = '';
+                document.getElementById('emp-email').value = '';
+                document.getElementById('emp-address').value = '';
+            },
+
+            async saveProject() {
                 const body = {
                     name: document.getElementById('proj-name').value,
                     company_name: document.getElementById('proj-company').value,
-                    description: document.getElementById('proj-desc').value
+                    description: document.getElementById('proj-desc').value,
+                    default_payment_terms: parseInt(document.getElementById('proj-terms').value || '30', 10)
                 };
                 try {
-                    await this.request('/api/projects', 'POST', body);
-                    this.notify('Project created!');
-                    this.fetchProjects();
+                    if (this.editingProjectID) {
+                        await this.request(`/api/projects/${this.editingProjectID}`, 'PUT', body);
+                        this.notify('Project updated!');
+                    } else {
+                        await this.request('/api/projects', 'POST', body);
+                        this.notify('Project created!');
+                    }
+                    this.resetProjectForm();
+                    await this.fetchProjects();
                 } catch(e) { this.notify(e.message, 'error'); }
             },
 
-            async createAssignment() {
+            editProject(id) {
+                const project = this.projectsByID.get(id);
+                if (!project) return;
+                this.editingProjectID = id;
+                document.getElementById('project-form-title').textContent = `Edit Project #${id}`;
+                document.getElementById('project-submit-btn').textContent = 'Update Project';
+                document.getElementById('project-cancel-btn').classList.remove('hidden');
+                document.getElementById('proj-name').value = project.name;
+                document.getElementById('proj-company').value = project.company_name;
+                document.getElementById('proj-desc').value = project.description || '';
+                document.getElementById('proj-terms').value = project.default_payment_terms || 30;
+            },
+
+            resetProjectForm() {
+                this.editingProjectID = null;
+                document.getElementById('project-form-title').textContent = 'Add Project';
+                document.getElementById('project-submit-btn').textContent = 'Save Project';
+                document.getElementById('project-cancel-btn').classList.add('hidden');
+                document.getElementById('proj-name').value = '';
+                document.getElementById('proj-company').value = '';
+                document.getElementById('proj-desc').value = '';
+                document.getElementById('proj-terms').value = '30';
+            },
+
+            async saveAssignment() {
                 const body = {
                     employee_id: parseInt(document.getElementById('asn-emp').value),
                     project_id: parseInt(document.getElementById('asn-proj').value),
@@ -253,10 +451,39 @@
                     pay_rate: parseFloat(document.getElementById('asn-pay').value)
                 };
                 try {
-                    await this.request('/api/assignments', 'POST', body);
-                    this.notify('Assignment created!');
-                    this.fetchAssignments();
+                    if (this.editingAssignmentID) {
+                        await this.request(`/api/assignments/${this.editingAssignmentID}`, 'PUT', body);
+                        this.notify('Assignment updated!');
+                    } else {
+                        await this.request('/api/assignments', 'POST', body);
+                        this.notify('Assignment created!');
+                    }
+                    this.resetAssignmentForm();
+                    await this.fetchAssignments();
+                    this.syncInvoiceOptions();
                 } catch(e) { this.notify(e.message, 'error'); }
+            },
+
+            editAssignment(id) {
+                const assignment = this.assignmentsByID.get(id);
+                if (!assignment) return;
+                this.editingAssignmentID = id;
+                document.getElementById('assignment-form-title').textContent = `Edit Assignment #${id}`;
+                document.getElementById('assignment-submit-btn').textContent = 'Update Assignment';
+                document.getElementById('assignment-cancel-btn').classList.remove('hidden');
+                document.getElementById('asn-emp').value = String(assignment.employee_id);
+                document.getElementById('asn-proj').value = String(assignment.project_id);
+                document.getElementById('asn-bill').value = assignment.billable_rate;
+                document.getElementById('asn-pay').value = assignment.pay_rate;
+            },
+
+            resetAssignmentForm() {
+                this.editingAssignmentID = null;
+                document.getElementById('assignment-form-title').textContent = 'New Assignment';
+                document.getElementById('assignment-submit-btn').textContent = 'Assign';
+                document.getElementById('assignment-cancel-btn').classList.add('hidden');
+                document.getElementById('asn-bill').value = '';
+                document.getElementById('asn-pay').value = '';
             },
 
             async createBillingCode() {
@@ -268,21 +495,29 @@
                 try {
                     await this.request('/api/billing-codes', 'POST', body);
                     this.notify('Billing code created!');
-                    this.fetchProjects();
+                    document.getElementById('bc-code').value = '';
+                    document.getElementById('bc-desc').value = '';
+                    await this.fetchProjects();
+                    if (this.isPageVisible('time')) await this.onAssignmentSelected(body.project_id);
                 } catch(e) { this.notify(e.message, 'error'); }
             },
 
             async onEmployeeSelected() {
                 const empId = document.getElementById('time-emp').value;
-                if(!empId) return;
-                const asns = await this.request(`/api/assignments/employee/${empId}`);
-
                 const asnSel = document.getElementById('time-asn');
-                asnSel.innerHTML = asns.map(a => `<option value="${a.id}">Asgn #${a.id} (Proj ${a.project_id})</option>`).join('');
-
-                if (asns.length === 1) {
-                    this.onAssignmentSelected(asns[0].project_id);
+                const bcSel = document.getElementById('time-bc');
+                if(!empId) {
+                    asnSel.innerHTML = '';
+                    bcSel.innerHTML = '';
+                    return;
                 }
+                const asns = await this.request(`/api/assignments/employee/${empId}`);
+                asnSel.innerHTML = asns.map(a => `<option value="${a.id}">${this.getAssignmentLabel(a.id)}</option>`).join('');
+                if (!asns.length) {
+                    bcSel.innerHTML = '';
+                    return;
+                }
+                await this.onAssignmentSelected(asns[0].project_id);
             },
 
             async onAssignmentSelected(projId) {
@@ -300,19 +535,61 @@
                 bcSel.innerHTML = codes.map(c => `<option value="${c.id}">${c.code} - ${c.description}</option>`).join('');
             },
 
-            async createTimeEntry() {
+            async saveTimeEntry() {
                 const body = {
                     assignment_id: parseInt(document.getElementById('time-asn').value),
-                    billing_code_id: parseInt(document.getElementById('time-bc').value),
+                    billing_code_id: document.getElementById('time-bc').value ? parseInt(document.getElementById('time-bc').value) : null,
                     date: document.getElementById('time-date').value,
                     hours: parseFloat(document.getElementById('time-hours').value),
                     task_description: document.getElementById('time-desc').value
                 };
                 try {
-                    await this.request('/api/time', 'POST', body);
-                    this.notify('Time logged!');
-                    this.fetchTimeEntries();
+                    if (this.editingTimeEntryID) {
+                        await this.request(`/api/time/${this.editingTimeEntryID}`, 'PUT', body);
+                        this.notify('Time entry updated!');
+                    } else {
+                        await this.request('/api/time', 'POST', body);
+                        this.notify('Time logged!');
+                    }
+                    await this.fetchTimeEntries();
+                    this.resetTimeEntryForm();
                 } catch(e) { this.notify(e.message, 'error'); }
+            },
+
+            async editTimeEntry(id) {
+                const entry = this.timeEntriesByID.get(id);
+                if (!entry) {
+                    this.notify('Time entry not found', 'error');
+                    return;
+                }
+                const assignment = this.assignmentsByID.get(entry.assignment_id);
+                if (!assignment) {
+                    this.notify('Assignment not found for this time entry', 'error');
+                    return;
+                }
+
+                this.editingTimeEntryID = id;
+                document.getElementById('time-form-title').textContent = `Edit Time Entry #${id}`;
+                document.getElementById('time-submit-btn').textContent = 'Update Entry';
+                document.getElementById('time-cancel-btn').classList.remove('hidden');
+                document.getElementById('time-emp').value = String(assignment.employee_id);
+                await this.onEmployeeSelected();
+                document.getElementById('time-asn').value = String(entry.assignment_id);
+                await this.onAssignmentSelected(assignment.project_id);
+                document.getElementById('time-bc').value = entry.billing_code_id ? String(entry.billing_code_id) : '';
+                document.getElementById('time-date').value = entry.date;
+                document.getElementById('time-hours').value = entry.hours;
+                document.getElementById('time-desc').value = entry.task_description || '';
+            },
+
+            resetTimeEntryForm() {
+                this.editingTimeEntryID = null;
+                document.getElementById('time-form-title').textContent = 'Log Time';
+                document.getElementById('time-submit-btn').textContent = 'Log Hours';
+                document.getElementById('time-cancel-btn').classList.add('hidden');
+                document.getElementById('time-date').value = '';
+                document.getElementById('time-hours').value = '';
+                document.getElementById('time-desc').value = '';
             },
 
             async generateInvoice() {
@@ -320,32 +597,66 @@
                 const eID = document.getElementById('inv-emp').value;
                 const yr = document.getElementById('inv-year').value;
                 const mo = document.getElementById('inv-month').value;
+                const descriptionMode = document.getElementById('inv-desc-mode').value;
 
                 if(!pID || !eID || !yr || !mo) {
                     this.notify('Please fill all fields', 'error');
                     return;
                 }
 
-                const url = `/api/invoice?proj=${pID}&emp=${eID}&year=${yr}&month=${mo}`;
-                window.location.href = url;
+                const url = `/api/invoice?proj=${pID}&emp=${eID}&year=${yr}&month=${mo}&description_mode=${descriptionMode}`;
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error(await res.text());
+                    const blob = await res.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = `invoice_${pID}_${eID}_${yr}_${String(mo).padStart(2, '0')}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(downloadUrl);
+                    this.notify('Invoice downloaded!');
+                } catch(e) {
+                    this.notify(e.message, 'error');
+                }
             }
         };
 
-        function showPage(pageId) {
+        async function showPage(pageId) {
             document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
             document.getElementById('page-' + pageId).classList.remove('hidden');
             document.querySelectorAll('nav li').forEach(l => l.classList.remove('active'));
             document.getElementById('nav-' + pageId).classList.add('active');
 
-            if(pageId === 'employees') api.fetchEmployees();
-            if(pageId === 'projects') api.fetchProjects();
-            if(pageId === 'assignments') { api.fetchAssignments(); api.fetchEmployees(); api.fetchProjects(); }
-            if(pageId === 'time') { api.fetchTimeEntries(); api.fetchAssignments(); api.fetchEmployees(); }
-            if(pageId === 'invoices') { api.fetchEmployees(); api.fetchProjects(); }
+            if(pageId === 'employees') await api.fetchEmployees();
+            if(pageId === 'projects') await api.fetchProjects();
+            if(pageId === 'assignments') {
+                await api.fetchEmployees();
+                await api.fetchProjects();
+                await api.fetchAssignments();
+            }
+            if(pageId === 'time') {
+                await api.fetchEmployees();
+                await api.fetchProjects();
+                await api.fetchAssignments();
+                await api.onEmployeeSelected();
+                await api.fetchTimeEntries();
+            }
+            if(pageId === 'invoices') {
+                await api.fetchEmployees();
+                await api.fetchProjects();
+                await api.fetchAssignments();
+                api.syncInvoiceOptions();
+                const now = new Date();
+                document.getElementById('inv-year').value ||= now.getFullYear();
+                document.getElementById('inv-month').value ||= now.getMonth() + 1;
+            }
         }
 
-        window.onload = () => {
-            showPage('employees');
+        window.onload = async () => {
+            await showPage('employees');
         }
     </script>
 </body>

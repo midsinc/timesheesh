@@ -2,6 +2,8 @@ package services
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 	"timesheesh/internal/models"
 )
@@ -197,6 +199,18 @@ func (s *TimeService) GetEmployeeAssignments(employeeID int) ([]models.Assignmen
 	return asns, nil
 }
 
+func (s *TimeService) GetEmployeeByID(employeeID int) (models.Employee, error) {
+	var employee models.Employee
+	err := s.db.QueryRow(
+		"SELECT id, first_name, last_name, email, address FROM employees WHERE id = ?",
+		employeeID,
+	).Scan(&employee.ID, &employee.FirstName, &employee.LastName, &employee.Email, &employee.Address)
+	if err != nil {
+		return models.Employee{}, err
+	}
+	return employee, nil
+}
+
 func (s *TimeService) GetEmployees() ([]models.Employee, error) {
 	rows, err := s.db.Query("SELECT id, first_name, last_name, email, address FROM employees")
 	if err != nil {
@@ -249,6 +263,158 @@ func (s *TimeService) GetAssignments() ([]models.Assignment, error) {
 		asns = append(asns, a)
 	}
 	return asns, nil
+}
+
+func (s *TimeService) GetProjectsByEmployee(employeeID int) ([]models.AgentProjectView, error) {
+	assignments, err := s.GetEmployeeAssignments(employeeID)
+	if err != nil {
+		return nil, err
+	}
+
+	projects, err := s.GetProjects()
+	if err != nil {
+		return nil, err
+	}
+	projectByID := make(map[int]models.Project, len(projects))
+	for _, project := range projects {
+		projectByID[project.ID] = project
+	}
+
+	billingCodesByProject, err := s.billingCodeSummariesByProject(projects)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]models.AgentProjectView, 0, len(assignments))
+	for _, assignment := range assignments {
+		project, ok := projectByID[assignment.ProjectID]
+		if !ok {
+			return nil, fmt.Errorf("project %d not found for assignment %d", assignment.ProjectID, assignment.ID)
+		}
+		views = append(views, models.AgentProjectView{
+			ID:           project.ID,
+			Name:         project.Name,
+			CompanyName:  project.CompanyName,
+			Description:  project.Description,
+			AssignmentID: assignment.ID,
+			BillingCodes: billingCodesByProject[project.ID],
+		})
+	}
+
+	return views, nil
+}
+
+func (s *TimeService) GetAllProjectsDetailed() ([]models.AgentProjectView, error) {
+	projects, err := s.GetProjects()
+	if err != nil {
+		return nil, err
+	}
+
+	billingCodesByProject, err := s.billingCodeSummariesByProject(projects)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]models.AgentProjectView, 0, len(projects))
+	for _, project := range projects {
+		views = append(views, models.AgentProjectView{
+			ID:           project.ID,
+			Name:         project.Name,
+			CompanyName:  project.CompanyName,
+			Description:  project.Description,
+			BillingCodes: billingCodesByProject[project.ID],
+		})
+	}
+
+	return views, nil
+}
+
+func (s *TimeService) GetAssignmentsDetailedByEmployee(employeeID int) ([]models.AgentAssignmentView, error) {
+	assignments, err := s.GetEmployeeAssignments(employeeID)
+	if err != nil {
+		return nil, err
+	}
+	return s.assignmentViews(assignments)
+}
+
+func (s *TimeService) GetAssignmentsDetailed() ([]models.AgentAssignmentView, error) {
+	assignments, err := s.GetAssignments()
+	if err != nil {
+		return nil, err
+	}
+	return s.assignmentViews(assignments)
+}
+
+func (s *TimeService) assignmentViews(assignments []models.Assignment) ([]models.AgentAssignmentView, error) {
+	employees, err := s.GetEmployees()
+	if err != nil {
+		return nil, err
+	}
+	projects, err := s.GetProjects()
+	if err != nil {
+		return nil, err
+	}
+
+	employeeByID := make(map[int]models.Employee, len(employees))
+	for _, employee := range employees {
+		employeeByID[employee.ID] = employee
+	}
+	projectByID := make(map[int]models.Project, len(projects))
+	for _, project := range projects {
+		projectByID[project.ID] = project
+	}
+
+	billingCodesByProject, err := s.billingCodeSummariesByProject(projects)
+	if err != nil {
+		return nil, err
+	}
+
+	views := make([]models.AgentAssignmentView, 0, len(assignments))
+	for _, assignment := range assignments {
+		employee, ok := employeeByID[assignment.EmployeeID]
+		if !ok {
+			return nil, fmt.Errorf("employee %d not found for assignment %d", assignment.EmployeeID, assignment.ID)
+		}
+		project, ok := projectByID[assignment.ProjectID]
+		if !ok {
+			return nil, fmt.Errorf("project %d not found for assignment %d", assignment.ProjectID, assignment.ID)
+		}
+
+		views = append(views, models.AgentAssignmentView{
+			ID:            assignment.ID,
+			EmployeeID:    employee.ID,
+			EmployeeName:  strings.TrimSpace(employee.FirstName + " " + employee.LastName),
+			EmployeeEmail: employee.Email,
+			ProjectID:     project.ID,
+			ProjectName:   project.Name,
+			BillableRate:  assignment.BillableRate,
+			PayRate:       assignment.PayRate,
+			BillingCodes:  billingCodesByProject[project.ID],
+		})
+	}
+
+	return views, nil
+}
+
+func (s *TimeService) billingCodeSummariesByProject(projects []models.Project) (map[int][]models.AgentBillingCodeSummary, error) {
+	summaries := make(map[int][]models.AgentBillingCodeSummary, len(projects))
+	for _, project := range projects {
+		codes, err := s.GetBillingCodesByProject(project.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		projectCodes := make([]models.AgentBillingCodeSummary, 0, len(codes))
+		for _, code := range codes {
+			projectCodes = append(projectCodes, models.AgentBillingCodeSummary{
+				ID:          code.ID,
+				Code:        code.Code,
+				Description: code.Description,
+			})
+		}
+		summaries[project.ID] = projectCodes
+	}
+	return summaries, nil
 }
 
 func (s *TimeService) GetTimeEntries(month string) ([]models.TimeEntry, error) {

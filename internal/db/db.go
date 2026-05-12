@@ -2,9 +2,22 @@ package db
 
 import (
 	"database/sql"
+	"embed"
+	"fmt"
+	"io/fs"
+	"sort"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+//go:embed migrations/*.sql
+var migrationFiles embed.FS
+
+type migration struct {
+	name string
+	sql  string
+}
 
 func InitDB(filepath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", filepath)
@@ -12,102 +25,225 @@ func InitDB(filepath string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	if err := createTables(db); err != nil {
+	if err := Migrate(db); err != nil {
 		return nil, err
 	}
 
 	return db, nil
 }
 
-func createTables(db *sql.DB) error {
-	queries := []string{
-		`CREATE TABLE IF NOT EXISTS employees (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			first_name TEXT NOT NULL,
-			last_name TEXT NOT NULL,
-			email TEXT UNIQUE NOT NULL,
-			address TEXT NOT NULL DEFAULT ''
-		);`,
-		`CREATE TABLE IF NOT EXISTS projects (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL,
-			company_name TEXT NOT NULL,
-			description TEXT,
-			default_payment_terms INTEGER NOT NULL DEFAULT 30
-		);`,
-		`CREATE TABLE IF NOT EXISTS billing_codes (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			project_id INTEGER NOT NULL,
-			code TEXT NOT NULL,
-			description TEXT,
-			FOREIGN KEY(project_id) REFERENCES projects(id)
-		);`,
-		`CREATE TABLE IF NOT EXISTS assignments (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			employee_id INTEGER NOT NULL,
-			project_id INTEGER NOT NULL,
-			billable_rate REAL NOT NULL,
-			pay_rate REAL NOT NULL,
-			FOREIGN KEY(employee_id) REFERENCES employees(id),
-			FOREIGN KEY(project_id) REFERENCES projects(id)
-		);`,
-		`CREATE TABLE IF NOT EXISTS time_entries (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			assignment_id INTEGER NOT NULL,
-			billing_code_id INTEGER,
-			date DATE NOT NULL,
-			hours REAL NOT NULL,
-			task_description TEXT,
-			FOREIGN KEY(assignment_id) REFERENCES assignments(id),
-			FOREIGN KEY(billing_code_id) REFERENCES billing_codes(id)
-		);`,
+func Migrate(db *sql.DB) error {
+	migrations, err := loadMigrations()
+	if err != nil {
+		return err
 	}
 
-	for _, q := range queries {
-		if _, err := db.Exec(q); err != nil {
+	if err := ensureMigrationTable(db); err != nil {
+		return err
+	}
+	if err := bootstrapLegacyMigrationState(db); err != nil {
+		return err
+	}
+
+	for _, migration := range migrations {
+		applied, err := migrationApplied(db, migration.name)
+		if err != nil {
 			return err
 		}
-	}
-
-	if err := migrateTables(db); err != nil {
-		return err
+		if applied {
+			continue
+		}
+		if err := applyMigration(db, migration); err != nil {
+			return fmt.Errorf("apply migration %s: %w", migration.name, err)
+		}
 	}
 
 	return nil
 }
 
-func migrateTables(db *sql.DB) error {
-	hasBillingCodeID, err := tableHasColumn(db, "time_entries", "billing_code_id")
+func loadMigrations() ([]migration, error) {
+	entries, err := fs.ReadDir(migrationFiles, "migrations")
+	if err != nil {
+		return nil, err
+	}
+
+	migrations := make([]migration, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+
+		content, err := fs.ReadFile(migrationFiles, "migrations/"+entry.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		migrations = append(migrations, migration{
+			name: entry.Name(),
+			sql:  string(content),
+		})
+	}
+
+	sort.Slice(migrations, func(i int, j int) bool {
+		return migrations[i].name < migrations[j].name
+	})
+
+	return migrations, nil
+}
+
+func applyMigration(db *sql.DB, migration migration) error {
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	if !hasBillingCodeID {
-		if _, err := db.Exec(`ALTER TABLE time_entries ADD COLUMN billing_code_id INTEGER REFERENCES billing_codes(id)`); err != nil {
+	defer tx.Rollback()
+
+	for _, statement := range splitSQLStatements(migration.sql) {
+		if _, err := tx.Exec(statement); err != nil {
 			return err
 		}
 	}
 
-	hasEmployeeAddress, err := tableHasColumn(db, "employees", "address")
+	if _, err := tx.Exec(
+		`INSERT INTO schema_migrations (name, applied_at) VALUES (?, CURRENT_TIMESTAMP)`,
+		migration.name,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func splitSQLStatements(sqlText string) []string {
+	parts := strings.Split(sqlText, ";")
+	statements := make([]string, 0, len(parts))
+	for _, part := range parts {
+		statement := strings.TrimSpace(part)
+		if statement == "" {
+			continue
+		}
+		statements = append(statements, statement)
+	}
+	return statements
+}
+
+func ensureMigrationTable(db *sql.DB) error {
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		name TEXT PRIMARY KEY,
+		applied_at DATETIME NOT NULL
+	)`)
+	return err
+}
+
+func migrationApplied(db *sql.DB, name string) (bool, error) {
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, name).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func bootstrapLegacyMigrationState(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	existingTables, err := existingAppTables(db)
 	if err != nil {
 		return err
 	}
-	if !hasEmployeeAddress {
-		if _, err := db.Exec(`ALTER TABLE employees ADD COLUMN address TEXT NOT NULL DEFAULT ''`); err != nil {
+	if len(existingTables) == 0 {
+		return nil
+	}
+
+	applied := make([]string, 0, 4)
+	hasBaseTables := existingTables["employees"] &&
+		existingTables["projects"] &&
+		existingTables["assignments"] &&
+		existingTables["time_entries"] &&
+		existingTables["billing_codes"]
+	if hasBaseTables {
+		applied = append(applied, "0001_initial_schema.sql")
+	}
+
+	if existingTables["time_entries"] {
+		hasBillingCodeID, err := tableHasColumn(db, "time_entries", "billing_code_id")
+		if err != nil {
+			return err
+		}
+		if hasBillingCodeID {
+			applied = append(applied, "0002_add_time_entry_billing_code.sql")
+		}
+	}
+
+	if existingTables["employees"] {
+		hasAddress, err := tableHasColumn(db, "employees", "address")
+		if err != nil {
+			return err
+		}
+		if hasAddress {
+			applied = append(applied, "0003_add_employee_address.sql")
+		}
+	}
+
+	if existingTables["projects"] {
+		hasPaymentTerms, err := tableHasColumn(db, "projects", "default_payment_terms")
+		if err != nil {
+			return err
+		}
+		if hasPaymentTerms {
+			applied = append(applied, "0004_add_project_payment_terms.sql")
+		}
+	}
+
+	if len(applied) == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, name := range applied {
+		if _, err := tx.Exec(
+			`INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, CURRENT_TIMESTAMP)`,
+			name,
+		); err != nil {
 			return err
 		}
 	}
 
-	hasPaymentTerms, err := tableHasColumn(db, "projects", "default_payment_terms")
-	if err != nil {
-		return err
-	}
-	if !hasPaymentTerms {
-		if _, err := db.Exec(`ALTER TABLE projects ADD COLUMN default_payment_terms INTEGER NOT NULL DEFAULT 30`); err != nil {
-			return err
-		}
-	}
+	return tx.Commit()
+}
 
-	return nil
+func existingAppTables(db *sql.DB) (map[string]bool, error) {
+	tableNames := []string{"employees", "projects", "billing_codes", "assignments", "time_entries"}
+	existing := make(map[string]bool, len(tableNames))
+	for _, name := range tableNames {
+		present, err := tableExists(db, name)
+		if err != nil {
+			return nil, err
+		}
+		existing[name] = present
+	}
+	return existing, nil
+}
+
+func tableExists(db *sql.DB, tableName string) (bool, error) {
+	var count int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`,
+		tableName,
+	).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func tableHasColumn(db *sql.DB, tableName string, columnName string) (bool, error) {

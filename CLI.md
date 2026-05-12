@@ -109,11 +109,13 @@ Example:
 ### Web Server
 
 - `timesheesh server`
+- `timesheesh migrate`
 
 Example:
 
 ```bash
 ./timesheesh server
+./timesheesh --db /path/to/timesheesh.db migrate
 ```
 
 ## Agent Notes
@@ -122,3 +124,4 @@ Example:
 - Human-readable references are accepted anywhere the command uses `employee_ref`, `project_ref`, or `assignment_ref`.
 - IDs returned by create/list commands still map directly to the same records used by the web app.
 - Invoice description mode accepts exactly `task` or `project`.
+- Schema migrations live in `internal/db/migrations/*.sql` and can be applied explicitly with `timesheesh migrate`.

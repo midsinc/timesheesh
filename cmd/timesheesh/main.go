@@ -684,6 +684,23 @@ var serverCmd = &cobra.Command{
 	},
 }
 
+var migrateCmd = &cobra.Command{
+	Use:   "migrate",
+	Short: "Apply pending database migrations",
+	Run: func(cmd *cobra.Command, args []string) {
+		database, err := db.InitDB(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to migrate DB: %v", err)
+		}
+		defer database.Close()
+
+		printOutput(
+			map[string]string{"db": dbPath, "status": "ok"},
+			fmt.Sprintf("Migrations applied to %s", dbPath),
+		)
+	},
+}
+
 func init() {
 	genInvoiceCmd.Flags().StringVar(&invoiceDescMode, "description-mode", "task", "Invoice description mode: task or project")
 
@@ -731,5 +748,6 @@ func init() {
 	rootCmd.AddCommand(timeCmd)
 
 	rootCmd.AddCommand(genInvoiceCmd)
+	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(serverCmd)
 }

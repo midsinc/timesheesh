@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN default_payment_terms INTEGER NOT NULL DEFAULT 30;

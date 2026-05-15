@@ -94,6 +94,27 @@ Quick logging notes:
 - `time log` resolves the employee from `--employee`, `TIMESHEESH_EMPLOYEE`, or the only employee in the database.
 - `billing_code_ref` can be either a numeric ID or the billing code itself, such as `DEV-01`.
 
+### Agent Discovery
+
+- `timesheesh agent projects --employee <employee_ref>`
+- `timesheesh agent projects --all`
+- `timesheesh agent assignments --employee <employee_ref>`
+- `timesheesh agent assignments --all`
+
+Example:
+
+```bash
+./timesheesh --json agent projects --employee willie@mids-inc.com
+./timesheesh --json agent assignments --employee willie@mids-inc.com
+./timesheesh --json agent projects --all
+```
+
+Agent discovery notes:
+
+- Use `--employee` to discover what one person may log against right now.
+- Use `--all` for admin-style discovery or when the employee is not known yet.
+- Employee-scoped discovery returns project-linked billing codes so an AI agent can avoid extra lookups before building a time entry.
+
 ### Invoices
 
 - `timesheesh invoice <project_ref> <employee_ref> <year> <month> <output>`
@@ -109,11 +130,13 @@ Example:
 ### Web Server
 
 - `timesheesh server`
+- `timesheesh migrate`
 
 Example:
 
 ```bash
 ./timesheesh server
+./timesheesh --db /path/to/timesheesh.db migrate
 ```
 
 ## Agent Notes
@@ -122,3 +145,5 @@ Example:
 - Human-readable references are accepted anywhere the command uses `employee_ref`, `project_ref`, or `assignment_ref`.
 - IDs returned by create/list commands still map directly to the same records used by the web app.
 - Invoice description mode accepts exactly `task` or `project`.
+- Schema migrations live in `internal/db/migrations/*.sql` and can be applied explicitly with `timesheesh migrate`.
+- The current agent CLI roadmap is documented in `docs/agent-cli-implementation-plan.md`.

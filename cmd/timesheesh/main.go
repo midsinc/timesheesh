@@ -27,6 +27,11 @@ var (
 	quickLogEmployeeRef    string
 	quickLogDate           string
 	quickLogBillingCodeRef string
+
+	agentProjectsEmployeeRef    string
+	agentProjectsAll            bool
+	agentAssignmentsEmployeeRef string
+	agentAssignmentsAll         bool
 )
 
 var rootCmd = &cobra.Command{
@@ -283,6 +288,37 @@ func resolveEntryDate(value string) time.Time {
 		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	}
 	return mustParseDate(value)
+}
+
+func validateAgentScope(employeeRef string, all bool) error {
+	hasEmployee := strings.TrimSpace(employeeRef) != ""
+	switch {
+	case hasEmployee == all:
+		return fmt.Errorf("use exactly one of --employee or --all")
+	default:
+		return nil
+	}
+}
+
+func agentEmployeeSummary(employee models.Employee) *models.AgentEmployeeSummary {
+	return &models.AgentEmployeeSummary{
+		ID:        employee.ID,
+		FirstName: employee.FirstName,
+		LastName:  employee.LastName,
+		Email:     employee.Email,
+	}
+}
+
+func billingCodeLabels(codes []models.AgentBillingCodeSummary) string {
+	if len(codes) == 0 {
+		return "-"
+	}
+
+	labels := make([]string, 0, len(codes))
+	for _, code := range codes {
+		labels = append(labels, code.Code)
+	}
+	return strings.Join(labels, ",")
 }
 
 var addEmployeeCmd = &cobra.Command{
@@ -650,6 +686,137 @@ var listTimeCmd = &cobra.Command{
 	},
 }
 
+var agentProjectsCmd = &cobra.Command{
+	Use:   "projects",
+	Short: "List projects available to an agent",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := validateAgentScope(agentProjectsEmployeeRef, agentProjectsAll); err != nil {
+			return err
+		}
+
+		setupDB()
+		if agentProjectsAll {
+			projects, err := service.GetAllProjectsDetailed()
+			if err != nil {
+				return err
+			}
+			response := models.AgentProjectsResponse{Projects: projects}
+			if jsonOutput {
+				printOutput(response, "")
+				return nil
+			}
+
+			fmt.Println("Agent Projects:")
+			for _, project := range projects {
+				fmt.Printf("[%d] %s | %s | billing_codes=%s\n",
+					project.ID,
+					project.Name,
+					project.CompanyName,
+					billingCodeLabels(project.BillingCodes),
+				)
+			}
+			return nil
+		}
+
+		employeeID := resolveEmployeeRef(agentProjectsEmployeeRef)
+		employee, err := service.GetEmployeeByID(employeeID)
+		if err != nil {
+			return err
+		}
+		projects, err := service.GetProjectsByEmployee(employeeID)
+		if err != nil {
+			return err
+		}
+		response := models.AgentProjectsResponse{
+			Employee: agentEmployeeSummary(employee),
+			Projects: projects,
+		}
+		if jsonOutput {
+			printOutput(response, "")
+			return nil
+		}
+
+		fmt.Printf("Projects for %s:\n", strings.TrimSpace(employee.FirstName+" "+employee.LastName))
+		for _, project := range projects {
+			fmt.Printf("[%d] %s | assignment=%d | billing_codes=%s\n",
+				project.ID,
+				project.Name,
+				project.AssignmentID,
+				billingCodeLabels(project.BillingCodes),
+			)
+		}
+		return nil
+	},
+}
+
+var agentAssignmentsCmd = &cobra.Command{
+	Use:   "assignments",
+	Short: "List assignments available to an agent",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := validateAgentScope(agentAssignmentsEmployeeRef, agentAssignmentsAll); err != nil {
+			return err
+		}
+
+		setupDB()
+		if agentAssignmentsAll {
+			assignments, err := service.GetAssignmentsDetailed()
+			if err != nil {
+				return err
+			}
+			response := models.AgentAssignmentsResponse{Assignments: assignments}
+			if jsonOutput {
+				printOutput(response, "")
+				return nil
+			}
+
+			fmt.Println("Agent Assignments:")
+			for _, assignment := range assignments {
+				fmt.Printf("[%d] %s :: %s | bill=%.2f pay=%.2f | billing_codes=%s\n",
+					assignment.ID,
+					assignment.EmployeeName,
+					assignment.ProjectName,
+					assignment.BillableRate,
+					assignment.PayRate,
+					billingCodeLabels(assignment.BillingCodes),
+				)
+			}
+			return nil
+		}
+
+		employeeID := resolveEmployeeRef(agentAssignmentsEmployeeRef)
+		employee, err := service.GetEmployeeByID(employeeID)
+		if err != nil {
+			return err
+		}
+		assignments, err := service.GetAssignmentsDetailedByEmployee(employeeID)
+		if err != nil {
+			return err
+		}
+		response := models.AgentAssignmentsResponse{
+			Employee:    agentEmployeeSummary(employee),
+			Assignments: assignments,
+		}
+		if jsonOutput {
+			printOutput(response, "")
+			return nil
+		}
+
+		fmt.Printf("Assignments for %s:\n", strings.TrimSpace(employee.FirstName+" "+employee.LastName))
+		for _, assignment := range assignments {
+			fmt.Printf("[%d] %s | bill=%.2f pay=%.2f | billing_codes=%s\n",
+				assignment.ID,
+				assignment.ProjectName,
+				assignment.BillableRate,
+				assignment.PayRate,
+				billingCodeLabels(assignment.BillingCodes),
+			)
+		}
+		return nil
+	},
+}
+
 var invoiceDescMode string
 
 var genInvoiceCmd = &cobra.Command{
@@ -681,6 +848,23 @@ var serverCmd = &cobra.Command{
 		if err := ws.Start("8888"); err != nil {
 			log.Fatalf("Server failed: %v", err)
 		}
+	},
+}
+
+var migrateCmd = &cobra.Command{
+	Use:   "migrate",
+	Short: "Apply pending database migrations",
+	Run: func(cmd *cobra.Command, args []string) {
+		database, err := db.InitDB(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to migrate DB: %v", err)
+		}
+		defer database.Close()
+
+		printOutput(
+			map[string]string{"db": dbPath, "status": "ok"},
+			fmt.Sprintf("Migrations applied to %s", dbPath),
+		)
 	},
 }
 
@@ -730,6 +914,19 @@ func init() {
 	timeCmd.AddCommand(addTimeCmd, logTimeCmd, updateTimeCmd, listTimeCmd)
 	rootCmd.AddCommand(timeCmd)
 
+	agentCmd := &cobra.Command{
+		Use:   "agent",
+		Short: "Discovery commands for AI agents",
+		Long:  "Agent commands expose project and assignment discovery in a machine-readable shape so AI agents can decide what they may log against before submitting time.",
+	}
+	agentProjectsCmd.Flags().StringVar(&agentProjectsEmployeeRef, "employee", "", "Employee reference for scoped discovery")
+	agentProjectsCmd.Flags().BoolVar(&agentProjectsAll, "all", false, "Return all projects instead of employee-scoped projects")
+	agentAssignmentsCmd.Flags().StringVar(&agentAssignmentsEmployeeRef, "employee", "", "Employee reference for scoped discovery")
+	agentAssignmentsCmd.Flags().BoolVar(&agentAssignmentsAll, "all", false, "Return all assignments instead of employee-scoped assignments")
+	agentCmd.AddCommand(agentProjectsCmd, agentAssignmentsCmd)
+	rootCmd.AddCommand(agentCmd)
+
 	rootCmd.AddCommand(genInvoiceCmd)
+	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(serverCmd)
 }
